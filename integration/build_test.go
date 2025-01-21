@@ -192,6 +192,7 @@ func TestBuildWithMultiPlatforms(t *testing.T) {
 		dir               string
 		args              []string
 		image             string
+		setup             func(t *testing.T, workdir string)
 		expectedPlatforms []v1.Platform
 	}{
 		{
@@ -200,11 +201,23 @@ func TestBuildWithMultiPlatforms(t *testing.T) {
 			args:              []string{"--platform", "linux/arm64,linux/amd64"},
 			expectedPlatforms: []v1.Platform{{OS: "linux", Architecture: "arm64"}, {OS: "linux", Architecture: "amd64"}},
 		},
+		{
+			setup:             setupBuildX,
+			description:       "build multiplatform images with buildx",
+			dir:               "testdata/buildx",
+			args:              []string{"--platform", "linux/arm64,linux/amd64", "--cache-artifacts=false", "--config", "config", "--detect-minikube=false", "--verbosity=trace"},
+			expectedPlatforms: []v1.Platform{{OS: "linux", Architecture: "arm64"}, {OS: "linux", Architecture: "amd64"}},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			MarkIntegrationTest(t, NeedsGcp)
+			if test.setup != nil {
+				MarkIntegrationTest(t, CanRunWithoutGcp)
+				test.setup(t, test.dir)
+			} else {
+				MarkIntegrationTest(t, NeedsGcp)
+			}
 			tmpfile := testutil.TempFile(t, "", []byte{})
 			args := append(test.args, "--file-output", tmpfile)
 			skaffold.Build(args...).InDir(test.dir).RunOrFail(t)
