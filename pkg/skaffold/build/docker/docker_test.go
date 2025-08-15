@@ -106,7 +106,7 @@ func TestDockerCLIBuild(t *testing.T) {
 			buildx:           true,
 			daemonless:       true,
 			imageName:        "gcr.io/k8s-skaffold/example:tag",
-			expectedCLIFlags: []string{"--cache-from", "gcr.io/k8s-skaffold/example:cache", "--cache-to", "type=registry,ref=gcr.io/k8s-skaffold/example:cache,mode=max", "--push", "--builder", "default", "--metadata-file", "metadata.json"},
+			expectedCLIFlags: []string{"--cache-from", "gcr.io/k8s-skaffold/example:cache", "--cache-to", "type=registry,ref=gcr.io/k8s-skaffold/example:cache,mode=max,image-manifest=true,oci-mediatypes=true", "--push", "--builder", "default", "--metadata-file", "metadata.json"},
 			expectedEnv:      []string{"KEY=VALUE", "DOCKER_BUILDKIT=1"},
 		},
 		{

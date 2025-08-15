@@ -259,7 +259,7 @@ func (b *Builder) adjustCache(ctx context.Context, a *latest.Artifact, artifactT
 				// add cache destination reference, only if we're pushing to a registry and not given in config
 				if len(a.DockerArtifact.CacheTo) == 0 && b.pushImages {
 					log.Entry(ctx).Debugf("Adjusting cache destination image ref: %s", cacheTag)
-					ct = append(ct, fmt.Sprintf("type=registry,ref=%s,mode=max", cacheTag))
+					ct = append(ct, fmt.Sprintf("type=registry,ref=%s,mode=max,image-manifest=true,oci-mediatypes=true", cacheTag))
 				}
 			}
 		} else {
