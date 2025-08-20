@@ -234,14 +234,28 @@ func (b *Builder) adjustCache(ctx context.Context, a *latest.Artifact, artifactT
 		// allow this behaviour to be disabled
 		return a
 	}
+	multiLevel, err := config.GetMultiLevelRepo(b.cfg.GlobalConfig())
+	if err != nil {
+		log.Entry(ctx).Errorf("getting multi-level repo support: %v", err)
+	}
+	cacheRepo, err := config.GetCacheRepo(b.cfg.GlobalConfig())
+	if err != nil {
+		log.Entry(ctx).Errorf("getting cache-repo %q: %v", cacheRepo, err)
+	}
 	if b.buildx {
 		// compute the full cache reference (including registry, preserving tag)
 		tag, _ := config.GetCacheTag(b.cfg.GlobalConfig())
-		imgRef, err := docker.ParseReference(artifactTag)
+		log.Entry(ctx).Debugf("parsing cache ref: %s", cacheRef)
+		imgRef, err := docker.ParseReference(cacheRef)
 		if err != nil {
 			log.Entry(ctx).Errorf("couldn't parse image tag: %v", err)
 		} else if tag != "" {
+			log.Entry(ctx).Debugf("using cache image base name: %s and tag: %s", imgRef.BaseName, tag)
 			cacheTag = fmt.Sprintf("%s:%s", imgRef.BaseName, tag)
+			cacheTag, err = docker.SubstituteDefaultRepoIntoImage(cacheRepo, multiLevel, cacheTag)
+			if err != nil {
+				log.Entry(ctx).Errorf("applying cache default repo to %q: %v", tag, err)
+			}
 		}
 	}
 	if !stringslice.Contains(a.DockerArtifact.CacheFrom, cacheRef) {

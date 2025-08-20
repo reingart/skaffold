@@ -229,6 +229,18 @@ func GetCacheTag(configFile string) (string, error) {
 	return cfg.CacheTag, nil
 }
 
+func GetCacheRepo(configFile string) (string, error) {
+	cfg, err := GetConfigForCurrentKubectx(configFile)
+	if err != nil {
+		log.Entry(context.TODO()).Errorf("Cannot read cache-repo from config: %v", err)
+		return "", err
+	}
+	if cfg.CacheRepo != "" {
+		log.Entry(context.TODO()).Infof("Using cache-repo=%s from config", cfg.CacheRepo)
+	}
+	return cfg.CacheRepo, nil
+}
+
 func GetBuildXBuilder(configFile string) string {
 	cfg, err := GetConfigForCurrentKubectx(configFile)
 	if err != nil {
