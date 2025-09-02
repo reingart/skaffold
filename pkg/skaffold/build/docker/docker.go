@@ -278,35 +278,48 @@ func (b *Builder) computeCacheRefTag(ctx context.Context, artifactTag string, ca
 	if err != nil {
 		log.Entry(ctx).Errorf("Getting cache-repo %q: %v", cacheRepo, err)
 	}
+	// build image env and expand cacheTag template:
+	imageInfoEnv, err := docker.EnvTags(artifactTag)
+	if err != nil {
+		log.Entry(ctx).Errorf("Couldn't build env tags: %v", err)
+	}
 	cacheTag, _ := config.GetCacheTag(b.cfg.GlobalConfig())
+	imageInfoEnv["CACHE_TAG"], err = util.ExpandEnvTemplate(cacheTag, imageInfoEnv)
+	if err != nil {
+		log.Entry(ctx).Errorf("Couldn't expand default cache-tag: %v", err)
+	}
 	if b.buildx {
 		// compute the full cache reference (including registry, preserving tag)
-		imageInfoEnv, err := docker.EnvTags(artifactTag)
-		if err != nil {
-			log.Entry(ctx).Errorf("Couldn't build env tags: %v", err)
-		}
 		log.Entry(ctx).Debugf("Expanding cache ref env template: %s", cacheRef)
 		cacheRef, err = util.ExpandEnvTemplate(cacheRef, imageInfoEnv)
 		if err != nil {
 			log.Entry(ctx).Errorf("Couldn't expand cache image tag: %v", err)
 		}
-		log.Entry(ctx).Infof("parsing expanded cache ref: %s", cacheRef)
+		log.Entry(ctx).Infof("Parsing expanded cache ref: %s", cacheRef)
 		imgRef, err := docker.ParseReference(cacheRef)
 		if err != nil {
-			log.Entry(ctx).Errorf("Couldn't parse image tag: %v", err)
-		}
-		// determine the cache tag (use explicit tag, configured cache-tag or fallback to image tag)
-		if imgRef.Tag != "" {
-			cacheTag = imgRef.Tag
-		} else if cacheTag == "" {
-			cacheTag = imageInfoEnv["IMAGE_TAG"]
-		}
-		log.Entry(ctx).Debugf("Rebuild cache image base name: %s and tag: %s", imgRef.BaseName, cacheTag)
-		cacheRef = fmt.Sprintf("%s:%s", imgRef.BaseName, cacheTag)
-		// sustitute the cache repository (registry):
-		cacheRef, err = docker.SubstituteDefaultRepoIntoImage(cacheRepo, multiLevel, cacheRef)
-		if err != nil {
-			log.Entry(ctx).Errorf("Applying cache default repo failed: %v", err)
+			log.Entry(ctx).Errorf("Couldn't parse image tag %s: %v", cacheRef, err)
+		} else {
+			// determine the cache tag (use explicit tag, expanded cache-tag or fallback to image tag)
+			tag := ""
+			if imgRef.Tag != "" {
+				tag = imgRef.Tag
+			} else if cacheTag == "" {
+				tag = imageInfoEnv["IMAGE_TAG"]
+			} else {
+				tag = imageInfoEnv["CACHE_TAG"]
+			}
+			if tag == "" {
+				log.Entry(ctx).Errorf("Invalid empty computed cache-tag")
+			}
+			log.Entry(ctx).Debugf("Rewrite cache image base name: %s and tag: %s", imgRef.BaseName, tag)
+			cacheRef = fmt.Sprintf("%s:%s", imgRef.BaseName, tag)
+			// sustitute the cache repository (registry):
+			ref, err := docker.SubstituteDefaultRepoIntoImage(cacheRepo, multiLevel, cacheRef)
+			if err != nil {
+				log.Entry(ctx).Errorf("Applying cache default repo failed for '%s': %v", cacheRef, err)
+			}
+			cacheRef = ref
 		}
 	}
 	log.Entry(ctx).Infof("Computed cache ref: %s", cacheRef)
