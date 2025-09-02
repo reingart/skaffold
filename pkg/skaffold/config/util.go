@@ -241,6 +241,18 @@ func GetCacheRepo(configFile string) (string, error) {
 	return cfg.CacheRepo, nil
 }
 
+func GetCacheFlags(configFile string) ([]string, error) {
+	cfg, err := GetConfigForCurrentKubectx(configFile)
+	if err != nil {
+		log.Entry(context.TODO()).Errorf("Cannot read cache-flags from config: %v", err)
+		return nil, err
+	}
+	if len(cfg.CacheFlags) > 0 {
+		log.Entry(context.TODO()).Infof("Using cache-flags=%s from config", cfg.CacheFlags)
+	}
+	return cfg.CacheFlags, nil
+}
+
 func GetBuildXBuilder(configFile string) string {
 	cfg, err := GetConfigForCurrentKubectx(configFile)
 	if err != nil {

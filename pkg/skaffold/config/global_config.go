@@ -35,6 +35,7 @@ type ContextConfig struct {
 	DebugHelpersRegistry string        `yaml:"debug-helpers-registry,omitempty"`
 	CacheTag             string        `yaml:"cache-tag,omitempty"`
 	CacheRepo            string        `yaml:"cache-repo,omitempty"`
+	CacheFlags           []string      `yaml:"cache-flags,omitempty"`
 	BuildXBuilder        string        `yaml:"buildx-builder,omitempty"`
 	UpdateCheck          *bool         `yaml:"update-check,omitempty"`
 	Survey               *SurveyConfig `yaml:"survey,omitempty"`

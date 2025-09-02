@@ -250,18 +250,29 @@ func (b *Builder) adjustCache(ctx context.Context, a *latest.Artifact, artifactT
 
 	// Create a new copy of CacheTo to modify destinations
 	ct := make([]string, max(len(a.DockerArtifact.CacheTo), 1))
-	if len(a.DockerArtifact.CacheTo) > 0 {
-		copy(ct, a.DockerArtifact.CacheTo)
-	} else if len(a.DockerArtifact.CacheFrom) > 0 {
-		log.Entry(ctx).Infof("Using first cache source as destination: %s", a.DockerArtifact.CacheFrom[0])
-		ct[0] = a.DockerArtifact.CacheFrom[0]
-	}
-	for i, image := range ct {
-		if b.buildx && b.pushImages {
-			cacheRef := b.computeCacheRefTag(ctx, artifactTag, image)
-			log.Entry(ctx).Debugf("Adjusting cache destination image ref: %s to %s", image, cacheRef)
-			ct[i] = fmt.Sprintf("type=registry,ref=%s,mode=max,image-manifest=true,oci-mediatypes=true", cacheRef)
+
+	// only process cache destination if cache flags are set (to avoid failures on cache push)
+	cacheFlags, _ := config.GetCacheFlags(b.cfg.GlobalConfig())
+	if len(cacheFlags) > 0 {
+		if len(a.DockerArtifact.CacheTo) > 0 {
+			copy(ct, a.DockerArtifact.CacheTo)
+		} else if len(a.DockerArtifact.CacheFrom) > 0 {
+			log.Entry(ctx).Infof("Using first cache source as destination: %s", a.DockerArtifact.CacheFrom[0])
+			ct[0] = a.DockerArtifact.CacheFrom[0]
 		}
+		for i, image := range ct {
+			if b.buildx && b.pushImages {
+				cacheRef := b.computeCacheRefTag(ctx, artifactTag, image)
+				log.Entry(ctx).Debugf("Adjusting cache destination image ref: %s to %s", image, cacheRef)
+				// append a new cache flag with the ref destination:
+				cacheFlags = append(cacheFlags, fmt.Sprintf("ref=%s", cacheRef))
+				// format the flags (comma separated) and it to the new cache-to array
+				ct[i] = fmt.Sprintf("%s", strings.Join(cacheFlags, ","))
+			}
+		}
+	} else {
+		log.Entry(ctx).Infof("No cache flags set, skipping cache destination adjustment")
+		ct = nil
 	}
 	copy := *a
 	copy.DockerArtifact.CacheFrom = cf
