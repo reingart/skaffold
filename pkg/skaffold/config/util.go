@@ -224,7 +224,7 @@ func GetCacheTag(configFile string) (string, error) {
 		return "", err
 	}
 	if cfg.CacheTag != "" {
-		log.Entry(context.TODO()).Infof("Using cache-tag=%s from config", cfg.CacheTag)
+		log.Entry(context.TODO()).Debugf("Using cache-tag=%s from config", cfg.CacheTag)
 	}
 	return cfg.CacheTag, nil
 }
@@ -236,7 +236,7 @@ func GetCacheRepo(configFile string) (string, error) {
 		return "", err
 	}
 	if cfg.CacheRepo != "" {
-		log.Entry(context.TODO()).Infof("Using cache-repo=%s from config", cfg.CacheRepo)
+		log.Entry(context.TODO()).Debugf("Using cache-repo=%s from config", cfg.CacheRepo)
 	}
 	return cfg.CacheRepo, nil
 }
@@ -248,7 +248,7 @@ func GetCacheFlags(configFile string) ([]string, error) {
 		return nil, err
 	}
 	if len(cfg.CacheFlags) > 0 {
-		log.Entry(context.TODO()).Infof("Using cache-flags=%s from config", cfg.CacheFlags)
+		log.Entry(context.TODO()).Debugf("Using cache-flags=%s from config", cfg.CacheFlags)
 	}
 	return cfg.CacheFlags, nil
 }
@@ -258,7 +258,7 @@ func GetBuildXBuilder(configFile string) string {
 	if err != nil {
 		log.Entry(context.TODO()).Errorf("Cannot read buildx-builder option from config: %v", err)
 	} else if cfg.BuildXBuilder != "" {
-		log.Entry(context.TODO()).Infof("Using buildx-builder=%s from config", cfg.BuildXBuilder)
+		log.Entry(context.TODO()).Debugf("Using buildx-builder=%s from config", cfg.BuildXBuilder)
 		return cfg.BuildXBuilder
 	}
 	return ""

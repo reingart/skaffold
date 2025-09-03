@@ -184,6 +184,10 @@ func (b *Builder) dockerCLIBuild(ctx context.Context, out io.Writer, name string
 	stderr := io.MultiWriter(out, &errBuffer)
 	cmd.Stderr = stderr
 
+	if b.buildx {
+		log.Entry(ctx).Infof("Running buildx command: %s", cmd.Args)
+	}
+
 	if err := util.RunCmd(ctx, cmd); err != nil {
 		if !b.buildx {
 			err = tryExecFormatErr(fmt.Errorf("running build: %w", err), errBuffer)
@@ -301,12 +305,12 @@ func (b *Builder) computeCacheRefTag(ctx context.Context, artifactTag string, ca
 	}
 	if b.buildx {
 		// compute the full cache reference (including registry, preserving tag)
-		log.Entry(ctx).Debugf("Expanding cache ref env template: %s", cacheRef)
+		log.Entry(ctx).Tracef("Expanding cache ref env template: %s", cacheRef)
 		cacheRef, err = util.ExpandEnvTemplate(cacheRef, imageInfoEnv)
 		if err != nil {
 			log.Entry(ctx).Errorf("Couldn't expand cache image tag: %v", err)
 		}
-		log.Entry(ctx).Infof("Parsing expanded cache ref: %s", cacheRef)
+		log.Entry(ctx).Tracef("Parsing expanded cache ref: %s", cacheRef)
 		imgRef, err := docker.ParseReference(cacheRef)
 		if err != nil {
 			log.Entry(ctx).Errorf("Couldn't parse image tag %s: %v", cacheRef, err)
@@ -323,7 +327,7 @@ func (b *Builder) computeCacheRefTag(ctx context.Context, artifactTag string, ca
 			if tag == "" {
 				log.Entry(ctx).Errorf("Invalid empty computed cache-tag")
 			}
-			log.Entry(ctx).Debugf("Rewrite cache image base name: %s and tag: %s", imgRef.BaseName, tag)
+			log.Entry(ctx).Tracef("Rewrite cache image base name: %s and tag: %s", imgRef.BaseName, tag)
 			cacheRef = fmt.Sprintf("%s:%s", imgRef.BaseName, tag)
 			// sustitute the cache repository (registry):
 			ref, err := docker.SubstituteDefaultRepoIntoImage(cacheRepo, multiLevel, cacheRef)
@@ -333,7 +337,7 @@ func (b *Builder) computeCacheRefTag(ctx context.Context, artifactTag string, ca
 			cacheRef = ref
 		}
 	}
-	log.Entry(ctx).Infof("Computed cache ref: %s", cacheRef)
+	log.Entry(ctx).Tracef("Computed cache ref: %s", cacheRef)
 	return cacheRef
 }
 
