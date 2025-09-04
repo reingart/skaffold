@@ -271,7 +271,7 @@ func (b *Builder) adjustCache(ctx context.Context, a *latest.Artifact, artifactT
 				// append a new cache flag with the ref destination:
 				cacheFlags = append(cacheFlags, fmt.Sprintf("ref=%s", cacheRef))
 				// format the flags (comma separated) and it to the new cache-to array
-				ct[i] = fmt.Sprintf("%s", strings.Join(cacheFlags, ","))
+				ct[i] = strings.Join(cacheFlags, ",")
 			}
 		}
 	} else {
@@ -317,11 +317,12 @@ func (b *Builder) computeCacheRefTag(ctx context.Context, artifactTag string, ca
 		} else {
 			// determine the cache tag (use explicit tag, expanded cache-tag or fallback to image tag)
 			tag := ""
-			if imgRef.Tag != "" {
+			switch {
+			case imgRef.Tag != "":
 				tag = imgRef.Tag
-			} else if cacheTag == "" {
+			case cacheTag == "":
 				tag = imageInfoEnv["IMAGE_TAG"]
-			} else {
+			default:
 				tag = imageInfoEnv["CACHE_TAG"]
 			}
 			if tag == "" {

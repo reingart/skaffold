@@ -376,7 +376,7 @@ func expandOnbuildInstructions(ctx context.Context, nodes []*parser.Node, cfg Co
 			var onbuildNodes []*parser.Node
 			if ons, found := onbuildNodesCache[strings.ToLower(from.image)]; found {
 				onbuildNodes = ons
-			} else if from.image == "" {
+			} else if from.image == "" || from.image == "image:latest" {
 				// some build args like artifact dependencies are not available until the first build sequence has completed.
 				// skip check if there are unavailable images
 				onbuildNodes = []*parser.Node{}
