@@ -1,7 +1,10 @@
 name: Release Standalone Executables
 
 # Triggers the workflow on push or pull request events
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}-${{github.workflow}}
