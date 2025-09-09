@@ -34,6 +34,8 @@ type ContextConfig struct {
 	// DebugHelpersRegistry is the registry from which the debug helper images are used.
 	DebugHelpersRegistry string        `yaml:"debug-helpers-registry,omitempty"`
 	CacheTag             string        `yaml:"cache-tag,omitempty"`
+	CacheRepo            string        `yaml:"cache-repo,omitempty"`
+	CacheFlags           []string      `yaml:"cache-flags,omitempty"`
 	BuildXBuilder        string        `yaml:"buildx-builder,omitempty"`
 	UpdateCheck          *bool         `yaml:"update-check,omitempty"`
 	Survey               *SurveyConfig `yaml:"survey,omitempty"`

@@ -20,11 +20,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/config"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/docker"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/instrumentation"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/output/log"
@@ -167,11 +169,40 @@ func (c *cache) tryImport(ctx context.Context, a *latest.Artifact, tag string, h
 		}
 	}
 	if load {
+		log.Entry(ctx).Tracef("Loading artifact %s", tag)
 		if !c.client.ImageExists(ctx, tag) {
 			log.Entry(ctx).Debugf("Importing artifact %s from docker registry", tag)
+			orig := tag
+			if c.buildx && c.cfg.GetCluster().Local {
+				o := c.cfg.GetCluster().DefaultRepo
+				old := o.String()
+				new, _ := config.GetDefaultRepo(c.cfg.GlobalConfig(), nil)
+				log.Entry(ctx).Tracef("Local cluster registry: %s remote registry: %s", old, new)
+				// replace old local default-repo with new remote default-repo in the image tag (using substring replace)
+				if old != "" && new != "" && old != new {
+					tag = strings.ReplaceAll(tag, old, new)
+					log.Entry(ctx).Tracef("Rewriting remote artifact %s", tag)
+				}
+			}
+			log.Entry(ctx).Tracef("Importing artifact %s from docker registry", tag)
 			err := c.client.Pull(ctx, io.Discard, tag, pl)
 			if err != nil {
+				log.Entry(ctx).Warnf("Failed to import artifact %s from docker registry: %v", tag, err)
 				return entry, err
+			}
+			log.Entry(ctx).Infof("Imported artifact %s from docker registry", tag)
+			if c.buildx && orig != tag {
+				// retag the image to the original tag (with old local default-repo)
+				if err := c.client.Tag(ctx, tag, orig); err != nil {
+					log.Entry(ctx).Errorf("Failed to retag imported image %s to %s: %v", tag, orig, err)
+				} else {
+					log.Entry(ctx).Infof("Retagged imported image %s to %s", tag, orig)
+					if digest, err := c.client.Push(ctx, io.Discard, orig); err != nil {
+						log.Entry(ctx).Errorf("Failed to push retagged image %s: %v", orig, err)
+					} else {
+						log.Entry(ctx).Tracef("Pushed retagged image %s with digest %s", orig, digest)
+					}
+				}
 			}
 		} else {
 			log.Entry(ctx).Debugf("Importing artifact %s from local docker", tag)

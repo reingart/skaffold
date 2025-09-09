@@ -184,6 +184,10 @@ func (b *Builder) dockerCLIBuild(ctx context.Context, out io.Writer, name string
 	stderr := io.MultiWriter(out, &errBuffer)
 	cmd.Stderr = stderr
 
+	if b.buildx {
+		log.Entry(ctx).Infof("Running buildx command: %s", cmd.Args)
+	}
+
 	if err := util.RunCmd(ctx, cmd); err != nil {
 		if !b.buildx {
 			err = tryExecFormatErr(fmt.Errorf("running build: %w", err), errBuffer)
@@ -225,55 +229,117 @@ func (b *Builder) pullCacheFromImages(ctx context.Context, out io.Writer, a *lat
 }
 
 // adjustCache returns an artifact where any cache references from the artifactImage is changed to the tagged built image name instead.
-// Under buildx, if cache-tag is configured, it will be used instead of the generated artifact tag (registry preserved)
+// Under buildx, templated cache refs will be evaluated (with image rewriting using the default cache repo and tag)
 // if no cacheTo was specified in the skaffold yaml, it will add a tagged destination using the same cache source reference
 func (b *Builder) adjustCache(ctx context.Context, a *latest.Artifact, artifactTag string) *latest.Artifact {
-	cacheRef := a.ImageName // lookup value to be replaced
-	cacheTag := artifactTag // full reference to be used
 	if os.Getenv("SKAFFOLD_DISABLE_DOCKER_CACHE_ADJUSTMENT") != "" {
 		// allow this behaviour to be disabled
 		return a
 	}
-	if b.buildx {
-		// compute the full cache reference (including registry, preserving tag)
-		tag, _ := config.GetCacheTag(b.cfg.GlobalConfig())
-		imgRef, err := docker.ParseReference(artifactTag)
-		if err != nil {
-			log.Entry(ctx).Errorf("couldn't parse image tag: %v", err)
-		} else if tag != "" {
-			cacheTag = fmt.Sprintf("%s:%s", imgRef.BaseName, tag)
-		}
-	}
-	if !stringslice.Contains(a.DockerArtifact.CacheFrom, cacheRef) {
+	if !stringslice.Contains(a.DockerArtifact.CacheFrom, a.ImageName) && !b.buildx {
 		return a
 	}
 
 	cf := make([]string, 0, len(a.DockerArtifact.CacheFrom))
-	ct := make([]string, 0, len(a.DockerArtifact.CacheTo))
+
 	for _, image := range a.DockerArtifact.CacheFrom {
-		if image == cacheRef {
+		cacheRef := artifactTag // full reference to be used (backward compatibility)
+		if b.buildx {
 			// change cache reference to to the tagged image name (built or given, including registry)
-			log.Entry(ctx).Debugf("Adjusting cache source image ref: %s", cacheTag)
-			cf = append(cf, cacheTag)
-			if b.buildx {
-				// add cache destination reference, only if we're pushing to a registry and not given in config
-				if len(a.DockerArtifact.CacheTo) == 0 && b.pushImages {
-					log.Entry(ctx).Debugf("Adjusting cache destination image ref: %s", cacheTag)
-					ct = append(ct, fmt.Sprintf("type=registry,ref=%s,mode=max", cacheTag))
-				}
-			}
-		} else {
-			cf = append(cf, image)
+			cacheRef = b.computeCacheRefTag(ctx, artifactTag, image)
+			log.Entry(ctx).Debugf("Adjusting cache source image ref: %s to %s", image, cacheRef)
 		}
+		cf = append(cf, cacheRef)
 	}
-	// just copy any other cache destination given in the config file:
-	for _, image := range a.DockerArtifact.CacheTo {
-		ct = append(cf, image)
+
+	// Create a new copy of CacheTo to modify destinations
+	ct := make([]string, max(len(a.DockerArtifact.CacheTo), 1))
+
+	// only process cache destination if cache flags are set (to avoid failures on cache push)
+	cacheFlags, _ := config.GetCacheFlags(b.cfg.GlobalConfig())
+	if len(cacheFlags) > 0 {
+		if len(a.DockerArtifact.CacheTo) > 0 {
+			copy(ct, a.DockerArtifact.CacheTo)
+		} else if len(a.DockerArtifact.CacheFrom) > 0 {
+			log.Entry(ctx).Infof("Using first cache source as destination: %s", a.DockerArtifact.CacheFrom[0])
+			ct[0] = a.DockerArtifact.CacheFrom[0]
+		}
+		for i, image := range ct {
+			if b.buildx && b.pushImages {
+				cacheRef := b.computeCacheRefTag(ctx, artifactTag, image)
+				log.Entry(ctx).Debugf("Adjusting cache destination image ref: %s to %s", image, cacheRef)
+				// append a new cache flag with the ref destination:
+				cacheFlags = append(cacheFlags, fmt.Sprintf("ref=%s", cacheRef))
+				// format the flags (comma separated) and it to the new cache-to array
+				ct[i] = strings.Join(cacheFlags, ",")
+			}
+		}
+	} else {
+		log.Entry(ctx).Infof("No cache flags set, skipping cache destination adjustment")
+		ct = nil
 	}
 	copy := *a
 	copy.DockerArtifact.CacheFrom = cf
 	copy.DockerArtifact.CacheTo = ct
 	return &copy
+}
+
+func (b *Builder) computeCacheRefTag(ctx context.Context, artifactTag string, cacheRef string) string {
+	multiLevel, err := config.GetMultiLevelRepo(b.cfg.GlobalConfig())
+	if err != nil {
+		log.Entry(ctx).Errorf("Getting multi-level repo support: %v", err)
+	}
+	cacheRepo, err := config.GetCacheRepo(b.cfg.GlobalConfig())
+	if err != nil {
+		log.Entry(ctx).Errorf("Getting cache-repo %q: %v", cacheRepo, err)
+	}
+	// build image env and expand cacheTag template:
+	imageInfoEnv, err := docker.EnvTags(artifactTag)
+	if err != nil {
+		log.Entry(ctx).Errorf("Couldn't build env tags: %v", err)
+	}
+	cacheTag, _ := config.GetCacheTag(b.cfg.GlobalConfig())
+	imageInfoEnv["CACHE_TAG"], err = util.ExpandEnvTemplate(cacheTag, imageInfoEnv)
+	if err != nil {
+		log.Entry(ctx).Errorf("Couldn't expand default cache-tag: %v", err)
+	}
+	if b.buildx {
+		// compute the full cache reference (including registry, preserving tag)
+		log.Entry(ctx).Tracef("Expanding cache ref env template: %s", cacheRef)
+		cacheRef, err = util.ExpandEnvTemplate(cacheRef, imageInfoEnv)
+		if err != nil {
+			log.Entry(ctx).Errorf("Couldn't expand cache image tag: %v", err)
+		}
+		log.Entry(ctx).Tracef("Parsing expanded cache ref: %s", cacheRef)
+		imgRef, err := docker.ParseReference(cacheRef)
+		if err != nil {
+			log.Entry(ctx).Errorf("Couldn't parse image tag %s: %v", cacheRef, err)
+		} else {
+			// determine the cache tag (use explicit tag, expanded cache-tag or fallback to image tag)
+			tag := ""
+			switch {
+			case imgRef.Tag != "":
+				tag = imgRef.Tag
+			case cacheTag == "":
+				tag = imageInfoEnv["IMAGE_TAG"]
+			default:
+				tag = imageInfoEnv["CACHE_TAG"]
+			}
+			if tag == "" {
+				log.Entry(ctx).Errorf("Invalid empty computed cache-tag")
+			}
+			log.Entry(ctx).Tracef("Rewrite cache image base name: %s and tag: %s", imgRef.BaseName, tag)
+			cacheRef = fmt.Sprintf("%s:%s", imgRef.BaseName, tag)
+			// sustitute the cache repository (registry):
+			ref, err := docker.SubstituteDefaultRepoIntoImage(cacheRepo, multiLevel, cacheRef)
+			if err != nil {
+				log.Entry(ctx).Errorf("Applying cache default repo failed for '%s': %v", cacheRef, err)
+			}
+			cacheRef = ref
+		}
+	}
+	log.Entry(ctx).Tracef("Computed cache ref: %s", cacheRef)
+	return cacheRef
 }
 
 // osCreateTemp allows for replacing metadata for testing purposes
