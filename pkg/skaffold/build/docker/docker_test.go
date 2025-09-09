@@ -106,7 +106,7 @@ func TestDockerCLIBuild(t *testing.T) {
 			buildx:           true,
 			daemonless:       true,
 			imageName:        "gcr.io/k8s-skaffold/example:tag",
-			expectedCLIFlags: []string{"--cache-from", "gcr.io/k8s-skaffold/example:cache", "--cache-to", "type=registry,ref=gcr.io/k8s-skaffold/example:cache,mode=max,image-manifest=true,oci-mediatypes=true", "--push", "--builder", "default", "--metadata-file", "metadata.json"},
+			expectedCLIFlags: []string{"--cache-from", "gcr.io/k8s-skaffold/example:cache", "--cache-to", "type=registry,mode=max,image-manifest=true,oci-mediatypes=true,ref=gcr.io/k8s-skaffold/example:cache", "--push", "--builder", "default", "--metadata-file", "metadata.json"},
 			expectedEnv:      []string{"KEY=VALUE", "DOCKER_BUILDKIT=1"},
 		},
 		{
@@ -195,7 +195,11 @@ func TestDockerCLIBuild(t *testing.T) {
 				return os.Open("metadata.json")
 			})
 			t.Override(&config.GetConfigForCurrentKubectx, func(configFile string) (*config.ContextConfig, error) {
-				return &config.ContextConfig{CacheTag: "cache", BuildXBuilder: "default"}, nil
+				var flags []string
+				if test.localBuild.Push != nil && *test.localBuild.Push {
+					flags = append(flags, "type=registry", "mode=max", "image-manifest=true", "oci-mediatypes=true")
+				}
+				return &config.ContextConfig{CacheTag: "cache", BuildXBuilder: "default", CacheFlags: flags}, nil
 			})
 			var mockCmd *testutil.FakeCmd
 
