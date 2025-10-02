@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/config"
 	sErrors "github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/errors"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/output/log"
 	"github.com/GoogleContainerTools/skaffold/v2/pkg/skaffold/util"
@@ -145,6 +146,11 @@ func IsInsecure(ref name.Reference, insecureRegistries map[string]bool) bool {
 }
 
 func parseReference(s string, cfg Config, opts ...name.Option) (name.Reference, error) {
+	mirror, _ := config.GetRegistryMirror(cfg.GlobalConfig())
+	if mirror != "" {
+		log.Entry(context.TODO()).Infof("Using default registry = %s for reference parsing", mirror)
+		opts = append(opts, name.WithDefaultRegistry(mirror))
+	}
 	ref, err := name.ParseReference(s, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing reference %q: %w", s, err)
