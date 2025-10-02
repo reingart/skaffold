@@ -81,6 +81,8 @@ jobs:
             else
               echo "final_release=latest" >> $GITHUB_ENV
             fi
+          elif [ "${{ github.ref }}" = "refs/heads/next" ]; then
+            echo "final_release=prep" >> $GITHUB_ENV
           else
             echo "final_release=draft" >> $GITHUB_ENV
           fi
