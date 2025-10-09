@@ -74,7 +74,7 @@ jobs:
       - name: Determine Release Type
         id: determine_release
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "$(git branch --show-current)" = "main" ]; then
             if git rev-parse "${VERSION}" >/dev/null 2>&1; then
               echo "Git tag ${VERSION} already exists. Skipping final release."
               echo "final_release=prep" >> $GITHUB_ENV
